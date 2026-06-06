@@ -14,6 +14,7 @@ from database import Database
 from handlers import router
 from admin import router as admin_router
 from chat import router as chat_router
+from update import router as update_router
 from scheduler import ReminderScheduler
 
 
@@ -60,6 +61,7 @@ async def main() -> None:
 
     dp = Dispatcher()
     dp.include_router(admin_router)   # админские команды — первыми
+    dp.include_router(update_router)  # обновление из git (для админа)
     dp.include_router(chat_router)    # режим чата — до разбора напоминаний
     dp.include_router(router)
 

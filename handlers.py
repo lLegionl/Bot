@@ -53,6 +53,12 @@ def _menu_kb(is_admin: bool) -> InlineKeyboardMarkup:
     ]
     if is_admin:
         rows.append(
+            [InlineKeyboardButton(text="🔄 Проверить обновление", callback_data="menu:update_check")]
+        )
+        rows.append(
+            [InlineKeyboardButton(text="⬇️ Обновить и перезапустить", callback_data="menu:update_pull")]
+        )
+        rows.append(
             [InlineKeyboardButton(text="♻️ Перезагрузить бота", callback_data="menu:restart")]
         )
     return InlineKeyboardMarkup(inline_keyboard=rows)
