@@ -43,25 +43,37 @@ def _main_keyboard() -> ReplyKeyboardMarkup:
     )
 
 
-def _menu_kb(is_admin: bool) -> InlineKeyboardMarkup:
-    """Стартовое меню с выбором раздела. Для админа добавляется перезагрузка."""
-    rows = [
+def _menu_root_kb(is_admin: bool) -> InlineKeyboardMarkup:
+    rows = [[InlineKeyboardButton(text="🤖 Действия", callback_data="menu:actions")]]
+    if is_admin:
+        rows.append([InlineKeyboardButton(text="🛠 Администратор", callback_data="menu:admin")])
+    rows.append([InlineKeyboardButton(text="❓ Помощь", callback_data="menu:help")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _menu_actions_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="💬 Чат с ИИ", callback_data="menu:chat")],
+        [InlineKeyboardButton(text="⏰ Напоминания", callback_data="menu:reminders")],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="menu:root")],
+    ])
+
+
+def _menu_reminders_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📋 Список напоминаний", callback_data="menu:list")],
         [InlineKeyboardButton(text="⚙️ Настройки", callback_data="menu:settings")],
-        [InlineKeyboardButton(text="💬 Чат с ИИ", callback_data="menu:chat")],
-        [InlineKeyboardButton(text="❓ Помощь", callback_data="menu:help")],
-    ]
-    if is_admin:
-        rows.append(
-            [InlineKeyboardButton(text="🔄 Проверить обновление", callback_data="menu:update_check")]
-        )
-        rows.append(
-            [InlineKeyboardButton(text="⬇️ Обновить и перезапустить", callback_data="menu:update_pull")]
-        )
-        rows.append(
-            [InlineKeyboardButton(text="♻️ Перезагрузить бота", callback_data="menu:restart")]
-        )
-    return InlineKeyboardMarkup(inline_keyboard=rows)
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="menu:actions")],
+    ])
+
+
+def _menu_admin_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🔄 Проверить обновление", callback_data="menu:update_check")],
+        [InlineKeyboardButton(text="⬇️ Обновить и перезапустить", callback_data="menu:update_pull")],
+        [InlineKeyboardButton(text="♻️ Перезагрузить бота", callback_data="menu:restart")],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="menu:root")],
+    ])
 
 
 def _menu_text() -> str:
@@ -155,13 +167,13 @@ async def _send_settings(message: Message, db: Database, config: Config) -> None
 async def cmd_start(message: Message, config: Config) -> None:
     is_admin = message.from_user is not None and message.from_user.id in config.admin_ids
     await message.answer(HELP_TEXT, reply_markup=_main_keyboard())
-    await message.answer(_menu_text(), reply_markup=_menu_kb(is_admin))
+    await message.answer(_menu_text(), reply_markup=_menu_root_kb(is_admin))
 
 
 @router.message(Command("menu"))
 async def cmd_menu(message: Message, config: Config) -> None:
     is_admin = message.from_user is not None and message.from_user.id in config.admin_ids
-    await message.answer(_menu_text(), reply_markup=_menu_kb(is_admin))
+    await message.answer(_menu_text(), reply_markup=_menu_root_kb(is_admin))
 
 
 @router.message(Command("help"))
@@ -195,6 +207,34 @@ async def btn_settings(message: Message, db: Database, config: Config) -> None:
 @router.message(F.text == BTN_HELP)
 async def btn_help(message: Message) -> None:
     await message.answer(HELP_TEXT, reply_markup=_main_keyboard())
+
+
+@router.callback_query(F.data == "menu:root")
+async def menu_root(cb: CallbackQuery, config: Config) -> None:
+    is_admin = cb.from_user is not None and cb.from_user.id in config.admin_ids
+    await cb.message.edit_text(_menu_text(), reply_markup=_menu_root_kb(is_admin))
+    await cb.answer()
+
+
+@router.callback_query(F.data == "menu:actions")
+async def menu_actions(cb: CallbackQuery) -> None:
+    await cb.message.edit_text("🤖 <b>Действия</b>\n\nВыберите:", reply_markup=_menu_actions_kb())
+    await cb.answer()
+
+
+@router.callback_query(F.data == "menu:reminders")
+async def menu_reminders(cb: CallbackQuery) -> None:
+    await cb.message.edit_text("⏰ <b>Напоминания</b>\n\nВыберите:", reply_markup=_menu_reminders_kb())
+    await cb.answer()
+
+
+@router.callback_query(F.data == "menu:admin")
+async def menu_admin(cb: CallbackQuery, config: Config) -> None:
+    if cb.from_user is None or cb.from_user.id not in config.admin_ids:
+        await cb.answer("Недоступно", show_alert=True)
+        return
+    await cb.message.edit_text("🛠 <b>Администратор</b>\n\nВыберите:", reply_markup=_menu_admin_kb())
+    await cb.answer()
 
 
 @router.callback_query(F.data == "menu:list")
