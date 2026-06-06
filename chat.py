@@ -38,7 +38,8 @@ SYSTEM_PROMPT = (
 # Чтобы добавить/сменить модель — отредактируйте этот словарь.
 CHAT_PROFILES: dict[str, tuple[str, str]] = {
     "gemma": ("💬 Gemma 4 31B", "google/gemma-4-31b-it:free"),
-    "nemotron": ("🛡 Nemotron 3.5 Safety", "nvidia/nemotron-3.5-content-safety:free"),
+    "qwen": ("🐧 Qwen3 Next 80B", "qwen/qwen3-next-80b-a3b-instruct:free"),
+    "gptoss": ("🤖 GPT-OSS 120B", "openai/gpt-oss-120b:free"),
 }
 
 MAX_HISTORY = 20          # сколько последних сообщений держим
@@ -156,13 +157,9 @@ async def start_chat(cb: CallbackQuery, config: Config) -> None:
     _chat_mode.add(chat_id)
     _chat_model[chat_id] = model
     _history[chat_id] = []  # новый диалог при выборе модели
-    note = ""
-    if key == "nemotron":
-        note = ("\n\n⚠️ Это модель-модератор безопасности, а не собеседник: "
-                "она оценивает текст (safe/unsafe и категории), а не ведёт диалог.")
     await cb.message.answer(
         f"💬 Чат с моделью <b>{name}</b> включён.\n"
-        f"Пишите сообщения. Выход — «🚪 Выйти из чата»." + note,
+        f"Пишите сообщения. Выход — «🚪 Выйти из чата».",
         reply_markup=_chat_keyboard(),
     )
     await cb.answer()
