@@ -6,6 +6,7 @@
 - API не хранит контекст — историю отправляем сами при каждом запросе.
 - Режим чата: пока активен, сообщения уходят в модель, а не в напоминания.
 """
+import asyncio
 import logging
 import re
 
@@ -97,7 +98,14 @@ def _build_messages(model: str, history: list[dict]) -> list[dict]:
     return [{"role": "system", "content": SYSTEM_PROMPT}, *history]
 
 
-async def _ask_model(config: Config, model: str, history: list[dict]) -> str:
+class RateLimited(Exception):
+    """Провайдер вернул 429 (перегружен). retry_after — сек до повтора."""
+    def __init__(self, retry_after: float):
+        self.retry_after = retry_after
+        super().__init__("rate limited")
+
+
+async def _ask_once(config: Config, model: str, history: list[dict]) -> str:
     payload = {"model": model, "messages": _build_messages(model, history), "stream": False}
     headers = {
         "Authorization": f"Bearer {config.openrouter_api_key}",
@@ -107,10 +115,25 @@ async def _ask_model(config: Config, model: str, history: list[dict]) -> str:
     async with aiohttp.ClientSession(timeout=timeout) as session:
         async with session.post(OPENROUTER_URL, json=payload, headers=headers) as resp:
             data = await resp.json()
+            if resp.status == 429:
+                meta = (data.get("error") or {}).get("metadata") or {}
+                retry = meta.get("retry_after_seconds") or 15
+                raise RateLimited(float(retry))
             if resp.status != 200:
-                msg = data.get("error", {}).get("message", f"HTTP {resp.status}")
+                msg = (data.get("error") or {}).get("message", f"HTTP {resp.status}")
                 raise RuntimeError(msg)
             return data["choices"][0]["message"]["content"].strip()
+
+
+async def _ask_model(config: Config, model: str, history: list[dict]) -> str:
+    """Запрос к модели с одним авто-повтором при 429 (перегрузка провайдера)."""
+    try:
+        return await _ask_once(config, model, history)
+    except RateLimited as rl:
+        wait = min(max(rl.retry_after, 1.0), 30.0)  # ждём, но не дольше 30 c
+        log.info("429 от провайдера, повтор через %.0f c (модель %s)", wait, model)
+        await asyncio.sleep(wait)
+        return await _ask_once(config, model, history)  # второй и последний раз
 
 
 def _clean_markdown(text: str) -> str:
@@ -197,6 +220,13 @@ async def chat_message(message: Message, config: Config) -> None:
     await message.bot.send_chat_action(chat_id, "typing")
     try:
         answer = await _ask_model(config, model, history)
+    except RateLimited:
+        history.pop()
+        await message.answer(
+            "⏳ Модель сейчас перегружена (бесплатный лимит). "
+            "Попробуйте через минуту или выберите другую модель: /chat"
+        )
+        return
     except Exception as e:
         log.exception("Ошибка запроса к модели")
         history.pop()
