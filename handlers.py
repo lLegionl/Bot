@@ -24,18 +24,18 @@ router = Router()
 REPEAT_MIN, REPEAT_MAX = 0, 20
 INTERVAL_MIN, INTERVAL_MAX = 1, 1440
 
-# Подписи кнопок главного меню (reply-клавиатура снизу).
-BTN_LIST = "📋 Список"
-BTN_SETTINGS = "⚙️ Настройки"
-BTN_HELP = "❓ Помощь"
+# Подписи кнопок нижней (reply) клавиатуры.
+BTN_REMINDERS = "⏰ Напоминания"
 BTN_CHAT = "💬 Чат"
+BTN_MENU = "🏠 Меню"
+BTN_HELP = "❓ Помощь"
 
 
 def _main_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text=BTN_LIST), KeyboardButton(text=BTN_SETTINGS)],
-            [KeyboardButton(text=BTN_CHAT), KeyboardButton(text=BTN_HELP)],
+            [KeyboardButton(text=BTN_REMINDERS), KeyboardButton(text=BTN_CHAT)],
+            [KeyboardButton(text=BTN_MENU), KeyboardButton(text=BTN_HELP)],
         ],
         resize_keyboard=True,
         is_persistent=True,
@@ -79,8 +79,14 @@ def _menu_admin_kb() -> InlineKeyboardMarkup:
 def _menu_text() -> str:
     return "🏠 <b>Главное меню</b>\n\nВыберите раздел:"
 
-HELP_TEXT = (
-    "🤖 <b>Бот-напоминалка</b>\n\n"
+
+WELCOME_TEXT = (
+    "👋 Привет! Это домашний бот <b>iMy</b> by Legion.\n\n"
+    "Пользуйтесь кнопками снизу или откройте 🏠 Меню."
+)
+
+REMINDERS_TEXT = (
+    "⏰ <b>Напоминания</b>\n\n"
     "Просто напишите, о чём и когда напомнить:\n"
     "• <i>напомни купить продукты завтра в 12</i>\n"
     "• <i>позвонить маме через 2 часа</i>\n"
@@ -88,11 +94,16 @@ HELP_TEXT = (
     "• <i>тренировка в пятницу в 18:00</i>\n\n"
     "Когда сработает напоминание, нажмите «✅ Стоп / Выполнено». "
     "Если не нажать — бот повторит его ещё раз через заданный интервал.\n\n"
-    "<b>Кнопки снизу:</b>\n"
-    "📋 Список — активные напоминания\n"
-    "⚙️ Настройки — число повторов и интервал\n"
-    "❓ Помощь — эта справка\n\n"
-    "Те же действия командами: /list, /settings, /help"
+    "Ниже: 📋 список активных напоминаний и ⚙️ настройки повторов."
+)
+
+HELP_TEXT = (
+    "❓ <b>Справка</b>\n\n"
+    "iMy by Legion умеет:\n"
+    "⏰ <b>Напоминания</b> — напоминает о делах в нужное время с повторами.\n"
+    "💬 <b>Чат с ИИ</b> — общение с языковой моделью.\n\n"
+    "Откройте 🏠 Меню для навигации по разделам.\n"
+    "Команды: /menu, /list, /settings, /chat"
 )
 
 
@@ -164,10 +175,8 @@ async def _send_settings(message: Message, db: Database, config: Config) -> None
 
 
 @router.message(CommandStart())
-async def cmd_start(message: Message, config: Config) -> None:
-    is_admin = message.from_user is not None and message.from_user.id in config.admin_ids
-    await message.answer(HELP_TEXT, reply_markup=_main_keyboard())
-    await message.answer(_menu_text(), reply_markup=_menu_root_kb(is_admin))
+async def cmd_start(message: Message) -> None:
+    await message.answer(WELCOME_TEXT, reply_markup=_main_keyboard())
 
 
 @router.message(Command("menu"))
@@ -191,17 +200,18 @@ async def cmd_list(message: Message, db: Database) -> None:
     await _send_list(message, db)
 
 
-# --- Кнопки главного меню (приходят обычным текстом, ловим ДО разбора напоминаний) ---
+# --- Кнопки нижней клавиатуры (приходят текстом, ловим ДО разбора напоминаний) ---
 
 
-@router.message(F.text == BTN_LIST)
-async def btn_list(message: Message, db: Database) -> None:
-    await _send_list(message, db)
+@router.message(F.text == BTN_REMINDERS)
+async def btn_reminders(message: Message) -> None:
+    await message.answer(REMINDERS_TEXT, reply_markup=_menu_reminders_kb())
 
 
-@router.message(F.text == BTN_SETTINGS)
-async def btn_settings(message: Message, db: Database, config: Config) -> None:
-    await _send_settings(message, db, config)
+@router.message(F.text == BTN_MENU)
+async def btn_menu(message: Message, config: Config) -> None:
+    is_admin = message.from_user is not None and message.from_user.id in config.admin_ids
+    await message.answer(_menu_text(), reply_markup=_menu_root_kb(is_admin))
 
 
 @router.message(F.text == BTN_HELP)
@@ -224,7 +234,7 @@ async def menu_actions(cb: CallbackQuery) -> None:
 
 @router.callback_query(F.data == "menu:reminders")
 async def menu_reminders(cb: CallbackQuery) -> None:
-    await cb.message.edit_text("⏰ <b>Напоминания</b>\n\nВыберите:", reply_markup=_menu_reminders_kb())
+    await cb.message.edit_text(REMINDERS_TEXT, reply_markup=_menu_reminders_kb())
     await cb.answer()
 
 
